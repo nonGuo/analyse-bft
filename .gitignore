@@ -1,0 +1,4 @@
+output/
+sql/
+src/__pycache__/
+ai_config.json
