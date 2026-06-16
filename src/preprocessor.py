@@ -26,6 +26,14 @@ def remove_comments(sql: str) -> str:
 
 
 def replace_variables(sql: str, default_value: str = "'2026-01-01'") -> str:
+    def _replace_hash_var(m):
+        inner = m.group(1)
+        brace = re.search(r'\{[^,]+,\s*([^}]+)\}', inner)
+        if brace:
+            return brace.group(1).strip()
+        return default_value.strip("'")
+
+    sql = re.sub(r'#([^#]+)#', _replace_hash_var, sql)
     sql = re.sub(r'\$\{[^}]+\}', default_value.strip("'"), sql)
     sql = re.sub(r'\$[a-zA-Z_][a-zA-Z0-9_.]*', default_value.strip("'"), sql)
     return sql
