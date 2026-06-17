@@ -1,4 +1,7 @@
-from .models import ColumnMapping, TableDependency, LineageResult, ParseResult
+from .models import (
+    ProcessingScenario, ColumnMapping, TableDependency, LineageResult, ParseResult,
+    ScenarioDataFlowNode, ScenarioDataFlowEdge, ScenarioChain,
+)
 from .preprocessor import preprocess_sql
 from .lineage_analyzer import LineageAnalyzer
 from .metadata_provider import LocalFileMetadataProvider, DatabaseMetadataProvider, DummyMetadataProvider
@@ -8,10 +11,14 @@ from .ai_rewriter import AIRewriter, AIRewriterConfig
 from .multi_file_analyzer import MultiFileAnalyzer
 
 __all__ = [
+    'ProcessingScenario',
     'ColumnMapping',
     'TableDependency',
     'LineageResult',
     'ParseResult',
+    'ScenarioDataFlowNode',
+    'ScenarioDataFlowEdge',
+    'ScenarioChain',
     'preprocess_sql',
     'LineageAnalyzer',
     'LocalFileMetadataProvider',
