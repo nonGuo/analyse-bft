@@ -10,7 +10,6 @@ def export_to_excel(parse_result: ParseResult, output_path: str):
         for mapping in lineage.mappings:
             rows.append({
                 "分组": mapping.group_id,
-                "场景": mapping.scenario.label,
                 "目标Schema": mapping.target_schema,
                 "目标表": mapping.target_table,
                 "目标字段": mapping.target_column,
@@ -24,7 +23,7 @@ def export_to_excel(parse_result: ParseResult, output_path: str):
             })
 
     if not rows:
-        df = pd.DataFrame(columns=["分组", "场景", "目标Schema", "目标表", "目标字段", "数据类型", "来源Schema", "源表", "表别名", "源字段", "转换规则", "加工场景"])
+        df = pd.DataFrame(columns=["分组", "目标Schema", "目标表", "目标字段", "数据类型", "来源Schema", "源表", "表别名", "源字段", "转换规则", "加工场景"])
     else:
         df = pd.DataFrame(rows)
 
@@ -33,7 +32,6 @@ def export_to_excel(parse_result: ParseResult, output_path: str):
         for table_lineage in lineage.table_lineages:
             table_lineage_rows.append({
                 "分组": table_lineage.group_id,
-                "场景": table_lineage.scenario.label,
                 "目标Schema": table_lineage.target_schema,
                 "目标表": table_lineage.target_table,
                 "来源Schema": table_lineage.source_schema,
@@ -46,7 +44,7 @@ def export_to_excel(parse_result: ParseResult, output_path: str):
             })
 
     if not table_lineage_rows:
-        df_table = pd.DataFrame(columns=["分组", "场景", "目标Schema", "目标表", "来源Schema", "源表", "表别名", "关联类型", "关联条件", "过滤条件", "CTE解析"])
+        df_table = pd.DataFrame(columns=["分组", "目标Schema", "目标表", "来源Schema", "源表", "表别名", "关联类型", "关联条件", "过滤条件", "CTE解析"])
     else:
         df_table = pd.DataFrame(table_lineage_rows)
 
@@ -85,9 +83,9 @@ def _format_excel(filepath: str, sheet_name: str = '字段血缘', is_table_line
             cell.border = thin_border
 
     if is_table_lineage:
-        column_widths = {'A': 8, 'B': 20, 'C': 20, 'D': 25, 'E': 20, 'F': 25, 'G': 15, 'H': 15, 'I': 50, 'J': 50, 'K': 12}
+        column_widths = {'A': 8, 'B': 20, 'C': 25, 'D': 20, 'E': 25, 'F': 15, 'G': 15, 'H': 50, 'I': 50, 'J': 12}
     else:
-        column_widths = {'A': 8, 'B': 20, 'C': 20, 'D': 25, 'E': 20, 'F': 15, 'G': 20, 'H': 25, 'I': 15, 'J': 30, 'K': 50, 'L': 15}
+        column_widths = {'A': 8, 'B': 20, 'C': 25, 'D': 20, 'E': 15, 'F': 20, 'G': 25, 'H': 15, 'I': 30, 'J': 50, 'K': 15}
     
     for col, width in column_widths.items():
         ws.column_dimensions[col].width = width

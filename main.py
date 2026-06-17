@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -13,6 +14,43 @@ from src import (
     ParseResult,
 )
 from src.multi_file_analyzer import MultiFileAnalyzer
+
+
+def _find_leaf_folders(root: Path) -> list[Path]:
+    leaf_folders = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        folder = Path(dirpath)
+        has_sql = any(f.endswith('.sql') for f in filenames)
+        has_subdirs = len(dirnames) > 0
+        if has_sql and not has_subdirs:
+            leaf_folders.append(folder)
+    leaf_folders.sort()
+    return leaf_folders
+
+
+def _validate_no_mixed_folders(root: Path) -> list[str]:
+    errors = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        has_sql = any(f.endswith('.sql') for f in filenames)
+        has_subdirs = len(dirnames) > 0
+        if has_sql and has_subdirs:
+            rel = Path(dirpath).relative_to(root)
+            errors.append(
+                f"文件夹 {rel} 同时包含SQL文件和子文件夹，不支持此结构。"
+                f"请将SQL文件移入子文件夹，或移除子文件夹。"
+            )
+    return errors
+
+
+def _get_sorted_sql_files(directory: Path) -> list[Path]:
+    sql_files = []
+    for f in directory.iterdir():
+        if f.is_file() and f.name.endswith('.sql'):
+            match = re.match(r'^(\d+)_(.+)\.sql$', f.name)
+            if match:
+                sql_files.append((int(match.group(1)), f))
+    sql_files.sort(key=lambda x: x[0])
+    return [f[1] for f in sql_files]
 
 
 def main():
@@ -75,13 +113,46 @@ def main():
         if args.ai:
             print(f"AI增强功能: 已启用")
         print(f"扫描目录: {input_path}")
-        
-        multi_analyzer = MultiFileAnalyzer(
-            metadata_provider=metadata_provider,
-            enable_ai=args.ai,
-            ai_config_file=args.ai_config
-        )
-        parse_result = multi_analyzer.parse_directory(str(input_path))
+
+        leaf_folders = _find_leaf_folders(input_path)
+        if not leaf_folders:
+            print("\n错误: 未找到包含SQL文件的文件夹")
+            sys.exit(1)
+
+        errors = _validate_no_mixed_folders(input_path)
+        if errors:
+            for err in errors:
+                print(f"错误: {err}")
+            sys.exit(1)
+
+        print(f"发现 {len(leaf_folders)} 个SQL文件夹:")
+        for folder in leaf_folders:
+            print(f"  - {folder.relative_to(input_path)}")
+
+        parse_result = ParseResult()
+
+        for folder in leaf_folders:
+            sql_files = _get_sorted_sql_files(folder)
+            if not sql_files:
+                continue
+
+            rel_path = folder.relative_to(input_path)
+            print(f"\n处理文件夹: {rel_path}")
+            print(f"  SQL文件: {len(sql_files)} 个")
+
+            analyzer = MultiFileAnalyzer(
+                metadata_provider=metadata_provider,
+                enable_ai=args.ai,
+                ai_config_file=args.ai_config
+            )
+            folder_result = analyzer.parse_files(
+                [str(f) for f in sql_files],
+                label=str(rel_path),
+            )
+
+            for lr in folder_result.lineage_results:
+                parse_result.lineage_results.append(lr)
+            parse_result.errors.extend(folder_result.errors)
         
         if not parse_result.lineage_results:
             print("\n警告: 未提取到任何血缘关系")

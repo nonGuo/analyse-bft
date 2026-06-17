@@ -33,9 +33,11 @@ class MultiFileAnalyzer:
 
     def parse_directory(self, directory: str) -> ParseResult:
         sql_files = self._get_sorted_sql_files(directory)
+        return self.parse_files(sql_files, directory)
 
+    def parse_files(self, sql_files: list[str], label: str = "") -> ParseResult:
         if not sql_files:
-            return ParseResult(errors=[f"No SQL files found in {directory}"])
+            return ParseResult(errors=[f"No SQL files found in {label}"])
 
         for sql_file in sql_files:
             self._parse_single_file(sql_file)
@@ -54,8 +56,7 @@ class MultiFileAnalyzer:
             file_results_map, detector,
         )
 
-        merged_result = self._merge_lineage_with_scenarios(detector)
-        return merged_result
+        return self._merge_lineage_with_scenarios(detector)
 
     def _get_sorted_sql_files(self, directory: str) -> list[str]:
         sql_files = []
@@ -113,45 +114,66 @@ class MultiFileAnalyzer:
                     scenario_tl_groups[key] = []
                 scenario_tl_groups[key].append(tl)
 
-        merged_mappings = []
-        merged_table_lineages = []
-        merged_dependencies = []
-
-        processed_targets = set()
+        target_groups: dict[str, dict] = {}
 
         for group_key, mappings in scenario_groups.items():
             target_table = group_key.split("::")[0]
             if target_table in temp_tables:
                 continue
-
-            merged_column_mappings = self._merge_column_mappings(mappings, temp_tables)
-            merged_mappings.extend(merged_column_mappings)
-            processed_targets.add(group_key)
+            if target_table not in target_groups:
+                target_groups[target_table] = {"mappings": {}, "lineages": {}, "next_gid": 1}
+            gid = target_groups[target_table]["next_gid"]
+            target_groups[target_table]["next_gid"] = gid + 1
+            merged = self._merge_column_mappings(mappings, temp_tables)
+            for m in merged:
+                m.group_id = gid
+            target_groups[target_table]["mappings"][group_key] = merged
 
         for group_key, lineages in scenario_tl_groups.items():
             target_table = group_key.split("::")[0]
             if target_table in temp_tables:
                 continue
-
+            if target_table not in target_groups:
+                target_groups[target_table] = {"mappings": {}, "lineages": {}, "next_gid": 1}
+            if group_key not in target_groups[target_table]["mappings"]:
+                gid = target_groups[target_table]["next_gid"]
+                target_groups[target_table]["next_gid"] = gid + 1
+            else:
+                gid = next(
+                    m.group_id for mappings in target_groups[target_table]["mappings"].values()
+                    for m in mappings
+                )
             merged_tl_list = self._merge_table_lineages(lineages, temp_tables)
-            merged_table_lineages.extend(merged_tl_list)
-
             for tl in merged_tl_list:
+                tl.group_id = gid
+            target_groups[target_table]["lineages"][group_key] = merged_tl_list
+
+        lineage_results = []
+        for target_table in sorted(target_groups.keys()):
+            group = target_groups[target_table]
+            all_mappings = []
+            for mappings in group["mappings"].values():
+                all_mappings.extend(mappings)
+            all_lineages = []
+            all_deps = []
+            for lineages in group["lineages"].values():
+                all_lineages.extend(lineages)
+            for tl in all_lineages:
                 full_source = f"{tl.source_schema}.{tl.source_table}" if tl.source_schema else tl.source_table
                 full_target = f"{tl.target_schema}.{tl.target_table}" if tl.target_schema else tl.target_table
                 dep = TableDependency(source_table=full_source, target_table=full_target)
-                if dep not in merged_dependencies:
-                    merged_dependencies.append(dep)
+                if dep not in all_deps:
+                    all_deps.append(dep)
 
-        lineage_result = LineageResult(
-            target_table="",
-            mappings=merged_mappings,
-            dependencies=merged_dependencies,
-            table_lineages=merged_table_lineages,
-            warnings=[]
-        )
+            lineage_results.append(LineageResult(
+                target_table=target_table,
+                mappings=all_mappings,
+                dependencies=all_deps,
+                table_lineages=all_lineages,
+                warnings=[],
+            ))
 
-        return ParseResult(lineage_results=[lineage_result])
+        return ParseResult(lineage_results=lineage_results)
 
     def _scenario_group_key(self, target_table: str, scenario: ProcessingScenario) -> str:
         if scenario.is_shared or not scenario.discriminator_value:
